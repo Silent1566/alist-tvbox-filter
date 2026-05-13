@@ -73,3 +73,63 @@ Extend config:
 ```
 
 If `api_url` already contains the LogVar key, `token` can be omitted.
+
+## 不懂聚合
+
+Use `aggregate/budong-aggregate.py` for a combined filter. It composes:
+
+- `detail/tmdb-scraper.py` for TMDB detail scraping
+- `player/logvar-danmaku.py` for LogVar danmaku
+
+Recommended stages:
+
+```text
+detail,player,danmaku
+```
+
+It also implements `parse` and `play` for testing multi-stage scenarios. When
+`detail` is selected, `parse` is a pass-through to avoid duplicate TMDB calls.
+When `player` is selected, `play` is a pass-through to avoid duplicate LogVar
+matching.
+
+Filter URL:
+
+```text
+https://raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/aggregate/budong-aggregate.py
+```
+
+Extend config:
+
+```json
+{
+  "tmdb": {
+    "tmdb_api_key": "YOUR_TMDB_KEY",
+    "language": "zh-CN",
+    "fallback_language": "en-US",
+    "type": "auto",
+    "season": 1,
+    "overwrite_episode_title": true,
+    "timeout": 8
+  },
+  "danmaku": {
+    "api_url": "http://127.0.0.1:9321",
+    "token": "YOUR_LOGVAR_KEY",
+    "timeout": 8,
+    "format": "xml",
+    "max_results": 1,
+    "search_fallback": true
+  }
+}
+```
+
+By default it reuses the two standalone filters from this repository through
+their raw GitHub URLs. Advanced users can override them:
+
+```json
+{
+  "sources": {
+    "tmdb": "https://raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/detail/tmdb-scraper.py",
+    "logvar": "https://raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/player/logvar-danmaku.py"
+  }
+}
+```

@@ -1,17 +1,17 @@
 # coding=utf-8
 """
-TMDB detail scraper filter for AList-TvBox Atvp.py.
+AList-TvBox Atvp.py 的 TMDB 详情刮削过滤器。
 
-Recommended stage: detail
+推荐阶段：detail
 
-Extend config examples:
+扩展配置示例：
 
-1. Minimal:
-   {"tmdb_api_key":"YOUR_TMDB_KEY"}
+1. 最小配置：
+   {"tmdb_api_key":"你的_TMDB_密钥"}
 
-2. Full:
+2. 完整配置：
    {
-     "tmdb_api_key": "YOUR_TMDB_KEY",
+     "tmdb_api_key": "你的_TMDB_密钥",
      "language": "zh-CN",
      "fallback_language": "en-US",
      "type": "auto",
@@ -20,8 +20,8 @@ Extend config examples:
      "timeout": 8
    }
 
-You can also put the key itself in Extend config, for example:
-   YOUR_TMDB_KEY
+也可以直接把密钥本身填进扩展配置，例如：
+   你的_TMDB_密钥
 """
 
 import json
@@ -49,11 +49,10 @@ class Filter:
         self._cache = {}
 
     def init(self, extend="", context=None):
-        """Read user configuration from the filter Extend field.
+        """从过滤器的扩展字段读取用户配置。
 
-        Atvp.py passes only filter-level Extend data into this method. The
-        system TMDB key stored in alist-tvbox is not exposed to subscription
-        clients, so this filter intentionally expects the key here.
+        Atvp.py 只会把过滤器级别的扩展数据传给这个方法。alist-tvbox 中保存的
+        系统 TMDB 密钥不会暴露给订阅客户端，所以这个过滤器会在这里显式读取密钥。
         """
         config = self._parse_extend(extend)
         self.api_key = (
@@ -70,24 +69,24 @@ class Filter:
         self.debug = self._to_bool(config.get("debug"), True)
 
         if not self.api_key:
-            self._log("init: missing tmdb_api_key; scraper will keep original details")
+            self._log("初始化：缺少 tmdb_api_key；将保留原始详情")
         else:
             self._log(
-                "init: language=%s fallback=%s type=%s season=%s overwrite_episode_title=%s"
+                "初始化：语言=%s 备用语言=%s 类型=%s 季=%s 改写剧集标题=%s"
                 % (self.language, self.fallback_language, self.media_type, self.season, self.overwrite_episode_title)
             )
 
     def detail(self, result, context=None):
-        """Scrape every VOD item returned by the detail API."""
+        """刮削详情接口返回的每个视频条目。"""
         if not isinstance(result, dict):
-            self._log("detail: result is not a dict; skip")
+            self._log("详情：result 不是字典；跳过")
             return result
         if not self.api_key:
             return result
 
         vod_list = result.get("list")
         if not isinstance(vod_list, list):
-            self._log("detail: result.list is not a list; skip")
+            self._log("详情：result.list 不是列表；跳过")
             return result
 
         for vod in vod_list:
@@ -96,26 +95,26 @@ class Filter:
             try:
                 self._scrape_vod(vod)
             except Exception as exc:
-                # Do not break playback because metadata scraping failed.
-                self._log("detail: scrape failed for %r: %s" % (vod.get("vod_name"), exc))
+                # 元数据刮削失败时，不影响播放流程。
+                self._log("详情：%r 刮削失败：%s" % (vod.get("vod_name"), exc))
         return result
 
     def _scrape_vod(self, vod):
         original_name = self._string(vod.get("vod_name"))
         query_name = self._clean_query_name(original_name)
         if not query_name:
-            self._log("scrape: empty vod_name; skip")
+            self._log("刮削：vod_name 为空；跳过")
             return
 
         year = self._extract_year(vod)
         media = self._find_best_media(query_name, year)
         if not media:
-            self._log("scrape: no TMDB match for name=%r year=%r" % (query_name, year))
+            self._log("刮削：没有匹配到 TMDB 条目 名称=%r 年份=%r" % (query_name, year))
             return
 
         details = self._get_details(media["type"], media["id"])
         if not details:
-            self._log("scrape: details missing for %s/%s" % (media["type"], media["id"]))
+            self._log("刮削：%s/%s 缺少详情" % (media["type"], media["id"]))
             return
 
         self._apply_details(vod, media["type"], details)
@@ -123,12 +122,12 @@ class Filter:
             self._apply_episode_titles(vod, details)
 
         self._log(
-            "scrape: matched %r -> %s/%s %r"
+            "刮削：已匹配 %r -> %s/%s %r"
             % (original_name, media["type"], media["id"], self._title(details))
         )
 
     def _find_best_media(self, name, year=None):
-        """Search TV first when auto, because this filter is usually used for episode lists."""
+        """自动类型时优先搜索剧集，因为这个过滤器通常用于剧集列表。"""
         if self.media_type in ("tv", "movie"):
             order = [self.media_type]
         else:
@@ -169,7 +168,7 @@ class Filter:
             ranked.append((score, {"type": media_type, "id": item["id"], "title": title}))
 
         ranked.sort(key=lambda pair: pair[0], reverse=True)
-        self._log("search: %s %r year=%r -> %d result(s)" % (media_type, name, year, len(ranked)))
+        self._log("搜索：%s %r 年份=%r -> %d 个结果" % (media_type, name, year, len(ranked)))
         return [item for _, item in ranked]
 
     def _get_details(self, media_type, tmdb_id):
@@ -184,7 +183,7 @@ class Filter:
         }
         details = self._get_json("/%s/%s" % (media_type, tmdb_id), params)
 
-        # If Chinese fields are sparse, keep structure but fill from fallback language.
+        # 中文字段不完整时保留原结构，并用备用语言补齐缺失文本。
         if self.fallback_language and self.fallback_language != self.language:
             fallback = self._get_json(
                 "/%s/%s" % (media_type, tmdb_id),
@@ -275,7 +274,7 @@ class Filter:
         season = self._get_season(details.get("id"), season_number)
         episodes = season.get("episodes") if isinstance(season, dict) else None
         if not isinstance(episodes, list):
-            self._log("episodes: no season episodes for tv=%s season=%s" % (details.get("id"), season_number))
+            self._log("剧集：tv=%s 季=%s 没有季集数据" % (details.get("id"), season_number))
             return
 
         title_map = {}
@@ -288,11 +287,11 @@ class Filter:
                 title_map[number] = title
 
         if not title_map:
-            self._log("episodes: season=%s has no usable title" % season_number)
+            self._log("剧集：季=%s 没有可用标题" % season_number)
             return
 
         vod["vod_play_url"] = self._rewrite_play_url(play_url, title_map)
-        self._log("episodes: rewritten %d episode title(s), season=%s" % (len(title_map), season_number))
+        self._log("剧集：已改写 %d 个剧集标题，季=%s" % (len(title_map), season_number))
 
     def _rewrite_play_url(self, play_url, title_map):
         return "$$$".join(self._rewrite_group(group, title_map) for group in play_url.split("$$$"))
@@ -338,11 +337,11 @@ class Filter:
         query = "&".join("%s=%s" % (quote(str(k)), quote(str(v))) for k, v in params.items() if v not in (None, ""))
         url = self.TMDB_API + path + "?" + query
         safe_url = re.sub(r"api_key=[^&]+", "api_key=***", url)
-        self._log("request: " + safe_url)
+        self._log("请求：" + safe_url)
 
         response = requests.get(url, timeout=self.timeout)
         if response.status_code != 200:
-            raise RuntimeError("TMDB HTTP %s: %s" % (response.status_code, response.text[:160]))
+            raise RuntimeError("TMDB HTTP %s：%s" % (response.status_code, response.text[:160]))
         time.sleep(0.05)
         return response.json()
 

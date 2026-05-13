@@ -11,20 +11,20 @@ DEFAULT_LOGVAR_SOURCE = "https://raw.githubusercontent.com/Silent1566/alist-tvbo
 
 
 class Filter:
-    """不懂聚合: compose TMDB detail scraping and LogVar danmaku.
+    """不懂聚合：组合 TMDB 详情刮削和 LogVar 弹幕。
 
-    Recommended stages: detail, player, danmaku.
-    Optional stages: parse, play. They are guarded to avoid running twice when
-    detail/player are already selected.
+    推荐阶段：detail、player、danmaku。
+    可选阶段：parse、play。当已经选择 detail/player 时，它们会直接透传，
+    避免重复运行。
 
-    Extend config:
+    扩展配置：
     {
       "tmdb": {
-        "tmdb_api_key": "YOUR_TMDB_KEY"
+        "tmdb_api_key": "你的_TMDB_密钥"
       },
       "danmaku": {
         "api_url": "http://127.0.0.1:9321",
-        "token": "YOUR_LOGVAR_KEY"
+        "token": "你的_LOGVAR_密钥"
       }
     }
     """
@@ -59,15 +59,14 @@ class Filter:
             if self._logvar is not None:
                 self._init_child(self._logvar, self._child_config(config, "danmaku", extend, "logvar"), context)
 
-        self._log("init done tmdb=%s logvar=%s" % (bool(self._tmdb), bool(self._logvar)))
+        self._log("初始化完成 tmdb=%s logvar=%s" % (bool(self._tmdb), bool(self._logvar)))
 
     def detail(self, result, context=None):
         return self._call_child(self._tmdb, "detail", result, context)
 
     def parse(self, result, context=None):
-        # Atvp runs detail after parse for parsed share details. If detail is
-        # selected too, keep parse as a light pass-through to avoid double TMDB
-        # requests in the common multi-stage configuration.
+        # Atvp 会在 parse 之后继续对已解析的分享详情运行 detail。
+        # 如果也选择了 detail，parse 只做轻量透传，避免常见多阶段配置下重复请求 TMDB。
         stages = self._configured_stages(context)
         if "all" in stages or "detail" in stages:
             return result
@@ -77,9 +76,8 @@ class Filter:
         return self._call_child(self._logvar, "player", result, context)
 
     def play(self, result, context=None):
-        # For backend play results, playerContent will still run the player
-        # stage afterwards. Only run here when users selected play without
-        # player.
+        # 对后端播放结果来说，playerContent 之后仍会运行 player 阶段。
+        # 只有用户选择了 play 但没有选择 player 时，才在这里执行。
         stages = self._configured_stages(context)
         if "all" in stages or "player" in stages:
             return result
@@ -95,7 +93,7 @@ class Filter:
             value = method(context)
             return True if value is None else bool(value)
         except Exception as error:
-            self._log("logvar.danmaku failed: %s" % error)
+            self._log("logvar.danmaku 调用失败：%s" % error)
             return False
 
     def _child_config(self, config, key, original_extend, alias=None):
@@ -130,11 +128,11 @@ class Filter:
             exec(compile(source_text, "<budong-%s>" % label, "exec"), module.__dict__)
             filter_cls = getattr(module, "Filter", None) or getattr(module, "Decorator", None)
             if filter_cls is None:
-                self._log("%s source has no Filter/Decorator class" % label)
+                self._log("%s 来源中没有 Filter/Decorator 类" % label)
                 return None
             return filter_cls()
         except Exception as error:
-            self._log("load %s failed: %s" % (label, error))
+            self._log("加载 %s 失败：%s" % (label, error))
             return None
 
     def _load_source(self, source):
@@ -176,7 +174,7 @@ class Filter:
             value = method(result, context)
             return result if value is None else value
         except Exception as error:
-            self._log("%s.%s failed: %s" % (child.__class__.__name__, method_name, error))
+            self._log("%s.%s 调用失败：%s" % (child.__class__.__name__, method_name, error))
             return result
 
     def _parse_config(self, extend):

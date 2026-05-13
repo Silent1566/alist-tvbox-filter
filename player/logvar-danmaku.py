@@ -6,19 +6,19 @@ from urllib.request import Request, urlopen
 
 
 class Filter:
-    """Add LogVar danmaku entries to TvBox playerContent results.
+    """给 TvBox playerContent 结果追加 LogVar 弹幕条目。
 
-    Extend config can be a JSON object:
+    扩展配置可以是 JSON 对象：
     {
       "api_url": "http://127.0.0.1:9321",
-      "token": "YOUR_LOGVAR_KEY",
+      "token": "你的_LOGVAR_密钥",
       "timeout": 8,
       "format": "xml"
     }
 
-    The filter reads title metadata from the Atvp player context. Atvp caches
-    that metadata from detailContent, so this filter works for subscriptions
-    used by other apps after the detail page has been opened.
+    过滤器会从 Atvp 播放器上下文读取标题元数据。Atvp 会缓存
+    detailContent 中的这些元数据，所以打开过详情页后，其他应用使用的
+    订阅也能通过这个过滤器匹配弹幕。
     """
 
     def __init__(self):
@@ -44,33 +44,33 @@ class Filter:
         self.search_fallback = self._to_bool(config.get("search_fallback", config.get("searchFallback", True)))
         self.platform = str(config.get("platform") or "").strip()
         self.replace = self._to_bool(config.get("replace", False))
-        self._log("initialized api_root=%s" % (self.api_root or "<empty>"))
+        self._log("初始化完成 接口根地址=%s" % (self.api_root or "<空>"))
 
     def player(self, result, context=None):
         if not isinstance(result, dict):
             return result
         if not self.api_root:
-            self._log("skip: api_url is empty")
+            self._log("跳过：api_url 为空")
             return result
 
         meta = self._extract_meta(context or {})
         file_name = self._build_file_name(meta)
         if not file_name:
-            self._log("skip: vod_name is empty in player context")
+            self._log("跳过：播放器上下文中的 vod_name 为空")
             return result
 
-        self._log("match fileName=%s" % file_name)
+        self._log("匹配 fileName=%s" % file_name)
         items = self._match(file_name)
         if not items and self.search_fallback:
             items = self._search(meta)
         if not items:
-            self._log("no danmaku matched")
+            self._log("没有匹配到弹幕")
             return result
 
         payload = dict(result)
         existing = payload.get("danmaku") if isinstance(payload.get("danmaku"), list) else []
         payload["danmaku"] = items if self.replace else self._merge_danmaku(existing, items)
-        self._log("added danmaku count=%s" % len(items))
+        self._log("已添加弹幕数量=%s" % len(items))
         return payload
 
     def danmaku(self, context=None):
@@ -229,7 +229,7 @@ class Filter:
         episode = str(episode_title or "").strip()
         if anime and episode:
             return "%s - %s" % (anime, episode)
-        return anime or episode or "LogVar danmaku"
+        return anime or episode or "LogVar 弹幕"
 
     def _merge_danmaku(self, existing, additions):
         merged = list(existing)
@@ -256,7 +256,7 @@ class Filter:
                 text = response.read().decode("utf-8", "ignore")
             return json.loads(text or "{}")
         except Exception as error:
-            self._log("request failed url=%s error=%s" % (url, error))
+            self._log("请求失败 url=%s 错误=%s" % (url, error))
             return None
 
     def _to_int(self, value, default, minimum, maximum):

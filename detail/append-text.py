@@ -3,7 +3,7 @@
 
 class Filter:
     def __init__(self):
-        self.suffix = " - text"
+        self.suffix = " - test"
 
     def init(self, extend="", env=None):
         if isinstance(extend, str) and extend.strip():

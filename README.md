@@ -41,3 +41,35 @@ Extend config can be a JSON object:
 ```
 
 For quick testing, Extend config can also be just the TMDB key string.
+
+## LogVar Danmaku
+
+Use `player/logvar-danmaku.py` with the `player` stage. It reads the current
+`vod_name`, episode title, and episode index from the Atvp player context,
+matches LogVar danmaku, and appends:
+
+```json
+{
+  "danmaku": [
+    {
+      "name": "Title - Episode",
+      "url": "http://host/key/api/v2/comment/123?format=xml"
+    }
+  ]
+}
+```
+
+Extend config:
+
+```json
+{
+  "api_url": "http://127.0.0.1:9321",
+  "token": "YOUR_LOGVAR_KEY",
+  "timeout": 8,
+  "format": "xml",
+  "max_results": 1,
+  "search_fallback": true
+}
+```
+
+If `api_url` already contains the LogVar key, `token` can be omitted.

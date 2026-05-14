@@ -32,6 +32,89 @@ from urllib.parse import quote
 
 import requests
 
+FILTER_CONFIG_SCHEMA = {
+    "source": "declared",
+    "description": "用于补充影视条目的 TMDB 元数据，例如封面、年份、简介、演员与导演信息。",
+    "allowAdditional": True,
+    "singleValueKey": "tmdb_api_key",
+    "example": {
+        "tmdb_api_key": "your_tmdb_key",
+        "language": "zh-CN",
+        "fallback_language": "en-US",
+        "type": "auto",
+        "season": 1,
+        "overwrite_episode_title": True,
+        "timeout": 8,
+        "debug": True
+    },
+    "fields": [
+        {
+            "key": "tmdb_api_key",
+            "label": "TMDB Key",
+            "type": "string",
+            "required": True,
+            "description": "TMDB API 密钥",
+            "aliases": ["api_key", "key"],
+            "placeholder": "请输入 TMDB API Key"
+        },
+        {
+            "key": "language",
+            "label": "语言",
+            "type": "string",
+            "required": False,
+            "description": "TMDB 主查询语言，默认使用中文 zh-CN。",
+            "defaultValue": "zh-CN"
+        },
+        {
+            "key": "fallback_language",
+            "label": "备用语言",
+            "type": "string",
+            "required": False,
+            "description": "主语言信息不完整时，用这个语言补齐缺失文本，默认 en-US。",
+            "defaultValue": "en-US"
+        },
+        {
+            "key": "type",
+            "label": "类型",
+            "type": "string",
+            "required": False,
+            "description": "可填 auto、movie 或 tv。auto 会自动判断影视类型。",
+            "defaultValue": "auto"
+        },
+        {
+            "key": "season",
+            "label": "季",
+            "type": "number",
+            "required": False,
+            "description": "电视剧场景下可手动指定季号，用于改写对应季的剧集标题。"
+        },
+        {
+            "key": "overwrite_episode_title",
+            "label": "覆盖剧集标题",
+            "type": "boolean",
+            "required": False,
+            "description": "是否使用 TMDB 的剧集标题覆盖原始播放列表标题，默认开启。",
+            "defaultValue": True
+        },
+        {
+            "key": "timeout",
+            "label": "超时秒数",
+            "type": "number",
+            "required": False,
+            "description": "请求 TMDB API 的超时秒数，默认 8 秒。",
+            "defaultValue": 8
+        },
+        {
+            "key": "debug",
+            "label": "调试日志",
+            "type": "boolean",
+            "required": False,
+            "description": "是否在运行时输出调试日志，默认开启。",
+            "defaultValue": True
+        }
+    ]
+}
+
 
 class Filter:
     TMDB_API = "https://api.themoviedb.org/3"

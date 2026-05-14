@@ -9,6 +9,201 @@ from urllib.request import Request, urlopen
 DEFAULT_TMDB_SOURCE = "https://gh-proxy.org/raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/detail/tmdb-scraper.py"
 DEFAULT_LOGVAR_SOURCE = "https://gh-proxy.org/raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/player/logvar-danmaku.py"
 
+FILTER_CONFIG_SCHEMA = {
+    "source": "declared",
+    "description": "组合 TMDB 元数据刮削与 LogVar 弹幕能力的聚合过滤器，可统一在一个过滤器中完成详情与弹幕增强。",
+    "allowAdditional": True,
+    "example": {
+        "enable_tmdb": True,
+        "enable_danmaku": True,
+        "load_timeout": 10,
+        "tmdb": {
+            "tmdb_api_key": "your_tmdb_key"
+        },
+        "danmaku": {
+            "api_url": "http://127.0.0.1:9321",
+            "token": "your_logvar_key"
+        }
+    },
+    "fields": [
+        {
+            "key": "enable_tmdb",
+            "label": "启用 TMDB",
+            "type": "boolean",
+            "required": False,
+            "description": "是否启用 TMDB 详情刮削子过滤器，默认开启。",
+            "aliases": ["enableTmdb"],
+            "defaultValue": True
+        },
+        {
+            "key": "enable_danmaku",
+            "label": "启用弹幕",
+            "type": "boolean",
+            "required": False,
+            "description": "是否启用 LogVar 弹幕子过滤器，默认开启。",
+            "aliases": ["enableDanmaku"],
+            "defaultValue": True
+        },
+        {
+            "key": "load_timeout",
+            "label": "加载超时",
+            "type": "number",
+            "required": False,
+            "description": "下载并加载子过滤器脚本时的超时秒数，默认 10 秒。",
+            "aliases": ["loadTimeout"],
+            "defaultValue": 10
+        },
+        {
+            "key": "tmdb_source",
+            "label": "TMDB 来源",
+            "type": "string",
+            "required": False,
+            "description": "可覆盖默认的 TMDB 子过滤器脚本地址或本地路径。",
+            "aliases": ["tmdbSource"]
+        },
+        {
+            "key": "logvar_source",
+            "label": "弹幕来源",
+            "type": "string",
+            "required": False,
+            "description": "可覆盖默认的 LogVar 子过滤器脚本地址或本地路径。",
+            "aliases": ["logvarSource", "danmaku_source", "danmakuSource"]
+        },
+        {
+            "key": "tmdb",
+            "label": "TMDB 配置",
+            "type": "object",
+            "required": False,
+            "description": "传递给 TMDB 子过滤器的嵌套配置对象。",
+            "children": [
+                {
+                    "key": "tmdb_api_key",
+                    "label": "TMDB Key",
+                    "type": "string",
+                    "required": True,
+                    "description": "TMDB API 密钥。",
+                    "aliases": ["api_key", "key"]
+                },
+                {
+                    "key": "language",
+                    "label": "语言",
+                    "type": "string",
+                    "required": False,
+                    "defaultValue": "zh-CN"
+                },
+                {
+                    "key": "fallback_language",
+                    "label": "备用语言",
+                    "type": "string",
+                    "required": False,
+                    "defaultValue": "en-US"
+                },
+                {
+                    "key": "type",
+                    "label": "类型",
+                    "type": "string",
+                    "required": False,
+                    "defaultValue": "auto"
+                },
+                {
+                    "key": "season",
+                    "label": "季",
+                    "type": "number",
+                    "required": False
+                },
+                {
+                    "key": "overwrite_episode_title",
+                    "label": "覆盖剧集标题",
+                    "type": "boolean",
+                    "required": False,
+                    "defaultValue": True
+                },
+                {
+                    "key": "timeout",
+                    "label": "超时秒数",
+                    "type": "number",
+                    "required": False,
+                    "defaultValue": 8
+                },
+                {
+                    "key": "debug",
+                    "label": "调试日志",
+                    "type": "boolean",
+                    "required": False,
+                    "defaultValue": True
+                }
+            ]
+        },
+        {
+            "key": "danmaku",
+            "label": "弹幕配置",
+            "type": "object",
+            "required": False,
+            "description": "传递给 LogVar 弹幕子过滤器的嵌套配置对象。",
+            "children": [
+                {
+                    "key": "api_url",
+                    "label": "接口地址",
+                    "type": "string",
+                    "required": True,
+                    "description": "LogVar 服务入口地址。",
+                    "aliases": ["apiUrl", "base_url", "baseUrl", "danmu_api", "danmuApi"]
+                },
+                {
+                    "key": "token",
+                    "label": "令牌",
+                    "type": "string",
+                    "required": False,
+                    "aliases": ["key", "api_key", "apiKey"]
+                },
+                {
+                    "key": "timeout",
+                    "label": "超时秒数",
+                    "type": "number",
+                    "required": False,
+                    "defaultValue": 8
+                },
+                {
+                    "key": "format",
+                    "label": "弹幕格式",
+                    "type": "string",
+                    "required": False,
+                    "defaultValue": "xml"
+                },
+                {
+                    "key": "max_results",
+                    "label": "最大结果数",
+                    "type": "number",
+                    "required": False,
+                    "aliases": ["maxResults"],
+                    "defaultValue": 1
+                },
+                {
+                    "key": "search_fallback",
+                    "label": "搜索回退",
+                    "type": "boolean",
+                    "required": False,
+                    "aliases": ["searchFallback"],
+                    "defaultValue": True
+                },
+                {
+                    "key": "platform",
+                    "label": "平台",
+                    "type": "string",
+                    "required": False
+                },
+                {
+                    "key": "replace",
+                    "label": "替换原播放项",
+                    "type": "boolean",
+                    "required": False,
+                    "defaultValue": False
+                }
+            ]
+        }
+    ]
+}
+
 
 class Filter:
     """不懂聚合：组合 TMDB 详情刮削和 LogVar 弹幕。

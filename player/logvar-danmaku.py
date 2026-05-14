@@ -4,6 +4,90 @@ import re
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+FILTER_CONFIG_SCHEMA = {
+    "source": "declared",
+    "description": "用于给播放器结果追加 LogVar 弹幕地址，支持按标题匹配弹幕。",
+    "allowAdditional": True,
+    "example": {
+        "api_url": "http://127.0.0.1:9321",
+        "token": "your_logvar_key",
+        "timeout": 8,
+        "format": "xml",
+        "max_results": 1,
+        "search_fallback": True,
+        "platform": "",
+        "replace": False
+    },
+    "fields": [
+        {
+            "key": "api_url",
+            "label": "接口地址",
+            "type": "string",
+            "required": True,
+            "description": "LogVar 服务入口地址，例如 http://127.0.0.1:9321 。",
+            "aliases": ["apiUrl", "base_url", "baseUrl", "danmu_api", "danmuApi"],
+            "placeholder": "http://127.0.0.1:9321"
+        },
+        {
+            "key": "token",
+            "label": "令牌",
+            "type": "string",
+            "required": False,
+            "description": "LogVar 访问令牌。若接口地址中已经带上 key，则这里可以留空。",
+            "aliases": ["key", "api_key", "apiKey"]
+        },
+        {
+            "key": "timeout",
+            "label": "超时秒数",
+            "type": "number",
+            "required": False,
+            "description": "请求 LogVar 接口的超时秒数，默认 8 秒。",
+            "defaultValue": 8
+        },
+        {
+            "key": "format",
+            "label": "弹幕格式",
+            "type": "string",
+            "required": False,
+            "description": "弹幕输出格式，默认 xml。",
+            "defaultValue": "xml"
+        },
+        {
+            "key": "max_results",
+            "label": "最大结果数",
+            "type": "number",
+            "required": False,
+            "description": "最多向播放器追加多少条弹幕结果，默认 1 条。",
+            "aliases": ["maxResults"],
+            "defaultValue": 1
+        },
+        {
+            "key": "search_fallback",
+            "label": "搜索回退",
+            "type": "boolean",
+            "required": False,
+            "description": "当精确匹配失败时，是否继续尝试搜索接口，默认开启。",
+            "aliases": ["searchFallback"],
+            "defaultValue": True
+        },
+        {
+            "key": "platform",
+            "label": "平台",
+            "type": "string",
+            "required": False,
+            "description": "可选的平台标记，会追加到匹配文件名后参与检索。"
+        },
+        {
+            "key": "replace",
+            "label": "替换原播放项",
+            "type": "boolean",
+            "required": False,
+            "description": "是否直接替换原有 danmaku 列表，而不是在后面追加，默认关闭。",
+            "defaultValue": False
+        }
+    ]
+}
+
 
 class Filter:
     """给 TvBox playerContent 结果追加 LogVar 弹幕条目。

@@ -6,8 +6,8 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
-DEFAULT_TMDB_SOURCE = "https://raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/detail/tmdb-scraper.py"
-DEFAULT_LOGVAR_SOURCE = "https://raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/player/logvar-danmaku.py"
+DEFAULT_TMDB_SOURCE = "https://gh-proxy.org/raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/detail/tmdb-scraper.py"
+DEFAULT_LOGVAR_SOURCE = "https://gh-proxy.org/raw.githubusercontent.com/Silent1566/alist-tvbox-filter/main/player/logvar-danmaku.py"
 
 
 class Filter:
@@ -156,7 +156,7 @@ class Filter:
             if len(parts) >= 5 and parts[2] == "blob":
                 owner, repo, branch = parts[0], parts[1], parts[3]
                 file_path = "/".join(parts[4:])
-                return "https://raw.githubusercontent.com/%s/%s/%s/%s" % (owner, repo, branch, file_path)
+                return "https://gh-proxy.org/raw.githubusercontent.com/%s/%s/%s/%s" % (owner, repo, branch, file_path)
         return value
 
     def _init_child(self, child, extend, context):

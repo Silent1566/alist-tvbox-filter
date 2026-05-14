@@ -380,17 +380,22 @@ class Filter:
         return "$$$".join(self._rewrite_group(group, title_map) for group in play_url.split("$$$"))
 
     def _rewrite_group(self, group, title_map):
-        return "#".join(self._rewrite_item(index, item, title_map) for index, item in enumerate(group.split("#"), start=1))
+        rewritten = []
+        for index, item in enumerate(group.split("#"), start=1):
+            episode_number, text = self._rewrite_item(index, item, title_map)
+            rewritten.append((episode_number, index, text))
+        rewritten.sort(key=lambda entry: (entry[0] is None, entry[0] or entry[1], entry[1]))
+        return "#".join(entry[2] for entry in rewritten)
 
     def _rewrite_item(self, fallback_index, item, title_map):
         old_label, separator, url = item.partition("$")
         if not separator:
-            return item
+            return None, item
         episode_number = self._episode_number(old_label) or fallback_index
         scraped_title = self._string(title_map.get(episode_number))
         if scraped_title and not self._is_generic_episode_title(scraped_title, episode_number):
-            return "第%s集 %s$%s" % (episode_number, scraped_title, url)
-        return "第%s集$%s" % (episode_number, url)
+            return episode_number, "第%s集 %s$%s" % (episode_number, scraped_title, url)
+        return episode_number, "第%s集$%s" % (episode_number, url)
 
     def _is_generic_episode_title(self, title, episode_number):
         text = self._string(title)

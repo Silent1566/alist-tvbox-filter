@@ -305,9 +305,26 @@ class Filter:
             return item
         episode_number = self._episode_number(old_label) or fallback_index
         scraped_title = self._string(title_map.get(episode_number))
-        if scraped_title:
+        if scraped_title and not self._is_generic_episode_title(scraped_title, episode_number):
             return "第%s集 %s$%s" % (episode_number, scraped_title, url)
         return "第%s集$%s" % (episode_number, url)
+
+    def _is_generic_episode_title(self, title, episode_number):
+        text = self._string(title)
+        if not text:
+            return True
+
+        normalized = re.sub(r"\s+", "", text).lower()
+        patterns = [
+            r"^第0*%s[集话話章节回期]?$" % episode_number,
+            r"^episode0*%s$" % episode_number,
+            r"^ep0*%s$" % episode_number,
+            r"^e0*%s$" % episode_number,
+        ]
+        for pattern in patterns:
+            if re.match(pattern, normalized, re.I):
+                return True
+        return False
 
     def _directors(self, details, media_type, credits):
         if media_type == "tv":

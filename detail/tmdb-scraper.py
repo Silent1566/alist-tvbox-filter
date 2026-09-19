@@ -327,8 +327,12 @@ class Filter:
 
         # 中文字段不完整时保留原结构，并用备用语言补齐缺失文本。
         if self.fallback_language and self.fallback_language != self.language:
-            fallback = self._get_details_with_extensions(media_type, tmdb_id, self.fallback_language)
-            details = self._merge_missing_text(details, fallback)
+            try:
+                fallback = self._get_details_with_extensions(media_type, tmdb_id, self.fallback_language)
+            except Exception as exc:
+                self._log("详情：备用语言 %s 获取失败，保留主语言详情：%s" % (self.fallback_language, exc))
+            else:
+                details = self._merge_missing_text(details, fallback)
 
         self._cache[cache_key] = details
         return details
@@ -340,7 +344,9 @@ class Filter:
         }
         extended_params = dict(base_params)
         extended_params.update({
-            "append_to_response": ",".join(self._detail_append_fields(media_type)),
+            "append_to_response": ",".join(
+                self._detail_append_fields(media_type) if self.include_tmdb_payload else ["credits"]
+            ),
             "include_image_language": self._image_languages(),
         })
         try:
@@ -387,6 +393,8 @@ class Filter:
             groups.append("recommendations")
         if not self._has_page_one(details.get("similar")):
             groups.append("similar")
+        if not self._has_results(details.get("videos")):
+            groups.append("videos")
         return groups
 
     def _request_params(self, group):
@@ -412,33 +420,46 @@ class Filter:
         elif group in ("images", "external_ids", "videos", "recommendations", "similar"):
             details[group] = payload
 
-    def _get_season(self, tv_id, season_number, details=None):
-        cache_key = ("season", tv_id, season_number, self.language)
+    def _get_season(self, tv_id, season_number, details=None, include_extras=None):
+        if include_extras is None:
+            include_extras = self.include_tmdb_payload
+        cache_key = ("season", tv_id, season_number, self.language, include_extras)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        season = self._get_json(
-            "/tv/%s/season/%s" % (tv_id, season_number),
-            {
-                "api_key": self.api_key,
-                "language": self.language,
+        params = {
+            "api_key": self.api_key,
+            "language": self.language,
+        }
+        if include_extras:
+            params.update({
                 "append_to_response": ",".join(self.SEASON_APPEND_FIELDS),
                 "include_image_language": self._image_languages(),
-            },
-        )
+            })
+        season = self._get_json("/tv/%s/season/%s" % (tv_id, season_number), params)
         if self.fallback_language and self.fallback_language != self.language:
-            fallback = self._get_json(
-                "/tv/%s/season/%s" % (tv_id, season_number),
-                {
-                    "api_key": self.api_key,
-                    "language": self.fallback_language,
+            fallback_params = {
+                "api_key": self.api_key,
+                "language": self.fallback_language,
+            }
+            if include_extras:
+                fallback_params.update({
                     "append_to_response": ",".join(self.SEASON_APPEND_FIELDS),
                     "include_image_language": self._image_languages(),
-                },
-            )
-            season = self._merge_episode_titles(season, fallback)
+                })
+            try:
+                fallback = self._get_json(
+                    "/tv/%s/season/%s" % (tv_id, season_number),
+                    fallback_params,
+                )
+            except Exception as exc:
+                self._log("季：tv=%s season=%s 备用语言获取失败，保留主语言详情：%s" % (
+                    tv_id, season_number, exc,
+                ))
+            else:
+                season = self._merge_episode_titles(season, fallback)
 
-        if isinstance(season, dict):
+        if include_extras and isinstance(season, dict):
             season = self._get_complete_season(tv_id, season_number, season)
 
         self._cache[cache_key] = season
@@ -476,17 +497,17 @@ class Filter:
         episodes = season.get("episodes") if isinstance(season, dict) else None
         if not isinstance(episodes, list):
             return
-        count = 0
+        processed = 0
         for episode in episodes:
             if not isinstance(episode, dict):
                 continue
             episode_number = self._to_int(episode.get("episode_number"))
             if not episode_number or episode_number <= 0:
                 continue
-            if count >= self.episode_video_limit:
+            if processed >= self.episode_video_limit:
                 break
+            processed += 1
             if self._has_non_empty_results(episode.get("videos")):
-                count += 1
                 continue
             try:
                 payload = self._get_json(
@@ -500,7 +521,6 @@ class Filter:
                 continue
             if self._has_results(payload):
                 episode["videos"] = payload
-                count += 1
 
     def _season_group_complete(self, season, group):
         if group == "credits":
@@ -723,10 +743,9 @@ class Filter:
         if not isinstance(value, dict):
             return False
         images = value.get("images")
-        if isinstance(images, dict):
-            if all(isinstance(images.get(key), list) for key in ("backdrops", "posters")):
-                return True
-        return bool(value.get("poster_path") or value.get("backdrop_path"))
+        return isinstance(images, dict) and all(
+            isinstance(images.get(key), list) for key in ("backdrops", "posters")
+        )
 
     def _has_detail_images(self, value):
         return self._has_image_data(value) and bool(value.get("poster_path") and value.get("backdrop_path"))
@@ -742,7 +761,7 @@ class Filter:
 
     def _trim_tmdb_payload(self, payload):
         limit = 2 * 1024 * 1024
-        if len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))) <= limit:
+        if self._payload_size(payload) <= limit:
             return payload
         complete = set(payload.get("complete") or [])
         for field, group in (
@@ -758,7 +777,7 @@ class Filter:
             if group:
                 complete.discard(group)
             payload["complete"] = sorted(complete)
-            if len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))) <= limit:
+            if self._payload_size(payload) <= limit:
                 return payload
         detail = payload.get("detail") if isinstance(payload.get("detail"), dict) else {}
         seasons = detail.get("seasons") if isinstance(detail.get("seasons"), list) else []
@@ -775,9 +794,13 @@ class Filter:
                     episode.pop("credits", None)
                     episode.pop("videos", None)
         payload["complete"] = sorted(group for group in complete if not group.startswith(("season:", "season_videos:", "episode:")))
-        if len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))) <= limit:
+        if self._payload_size(payload) <= limit:
             return payload
         return None
+
+    def _payload_size(self, payload):
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        return len(text.encode("utf-8"))
 
     def _rewrite_play_url(self, play_url, title_map):
         return "$$$".join(self._rewrite_group(group, title_map) for group in play_url.split("$$$"))

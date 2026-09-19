@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import unittest
+from urllib.parse import parse_qs, urlparse
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -111,6 +112,10 @@ def tv_detail():
             }
         ],
     }
+
+
+def payload_size(payload):
+    return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 class FakeRequests:
@@ -251,6 +256,76 @@ class TmdbScraperC16Test(unittest.TestCase):
         self.assertEqual(vod["vod_name"], "Fight Club")
         self.assertEqual(vod["vod_actor"], "Actor")
         self.assertNotIn("tmdb", vod)
+        detail_urls = [
+            url for url in scraper._requests.calls
+            if url.startswith("http") and "/movie/550" in url and "/search/" not in url
+        ]
+        self.assertEqual(len(detail_urls), 1)
+        query = parse_qs(urlparse(detail_urls[0]).query)
+        self.assertEqual(query.get("append_to_response"), ["credits"])
+
+    def test_disabled_payload_uses_lightweight_tv_season_request(self):
+        detail = tv_detail()
+        season = copy.deepcopy(detail["seasons"][0])
+        scraper = self.make_filter(media_type="tv", detail=detail, season=season)
+        scraper.include_tmdb_payload = False
+        vod = {"vod_name": "Game of Thrones S01", "vod_year": "2011", "vod_play_url": "第1集$http://example/1.m3u8"}
+        scraper.detail({"list": [vod]})
+
+        season_urls = [url for url in scraper._requests.calls if "/season/1" in url and "/episode/" not in url]
+        self.assertEqual(len(season_urls), 1)
+        query = parse_qs(urlparse(season_urls[0]).query)
+        self.assertNotIn("append_to_response", query)
+        self.assertNotIn("tmdb", vod)
+
+    def test_detail_fallback_failure_keeps_primary_result(self):
+        scraper = self.make_filter()
+        scraper.fallback_language = "en-US"
+        original_get = scraper._requests.get
+
+        def fake_get(url, timeout=None):
+            if "/movie/550" in url and "language=en-US" in url:
+                raise RuntimeError("fallback down")
+            return original_get(url, timeout)
+
+        scraper._requests.get = fake_get
+        vod = {"vod_name": "Fight Club", "vod_year": "1999", "vod_play_url": "正片$http://example/movie.m3u8"}
+        scraper.detail({"list": [vod]})
+
+        self.assertEqual(vod["vod_name"], "Fight Club")
+        self.assertEqual(vod["vod_actor"], "Actor")
+        self.assertEqual(vod["tmdb"]["id"], 550)
+
+    def test_season_fallback_failure_keeps_primary_season(self):
+        detail = tv_detail()
+        season = copy.deepcopy(detail["seasons"][0])
+        scraper = self.make_filter(media_type="tv", detail=detail, season=season)
+        scraper.fallback_language = "en-US"
+        original_get = scraper._requests.get
+
+        def fake_get(url, timeout=None):
+            if "/season/1" in url and "/episode/" not in url and "language=en-US" in url:
+                raise RuntimeError("season fallback down")
+            return original_get(url, timeout)
+
+        scraper._requests.get = fake_get
+        vod = {"vod_name": "Game of Thrones S01", "vod_year": "2011", "vod_play_url": "第1集$http://example/1.m3u8"}
+        scraper.detail({"list": [vod]})
+
+        payload = vod["tmdb"]
+        self.assertIn("season:1", payload["complete"])
+        self.assertEqual(payload["detail"]["seasons"][0]["episodes"][0]["name"], "Winter Is Coming")
+        self.assertEqual(vod["vod_play_url"], "第1集 Winter Is Coming$http://example/1.m3u8")
+
+    def test_poster_paths_do_not_claim_images_without_images_payload(self):
+        detail = movie_detail()
+        detail.pop("images")
+        scraper = self.make_filter(detail=detail)
+        vod = {"vod_name": "Fight Club", "vod_year": "1999", "vod_play_url": "正片$http://example/movie.m3u8"}
+        scraper.detail({"list": [vod]})
+
+        self.assertTrue(any("/movie/550/images" in url for url in scraper._requests.calls))
+        self.assertNotIn("images", vod["tmdb"]["complete"])
 
     def test_failed_season_is_not_declared_complete(self):
         detail = tv_detail()
@@ -314,11 +389,33 @@ class TmdbScraperC16Test(unittest.TestCase):
         }
         trimmed = scraper._trim_tmdb_payload(payload)
         self.assertIsNotNone(trimmed)
-        self.assertLessEqual(len(json.dumps(trimmed, ensure_ascii=False, separators=(",", ":"))), 2 * 1024 * 1024)
+        self.assertLessEqual(payload_size(trimmed), 2 * 1024 * 1024)
         for field in ("similar", "recommendations", "videos", "images"):
             if field not in trimmed["detail"]:
                 self.assertNotIn(field, trimmed["complete"])
         self.assertIn("core", trimmed["complete"])
+
+    def test_oversized_multibyte_payload_uses_utf8_byte_limit(self):
+        scraper = self.make_filter()
+        payload = {
+            "schema": 1,
+            "id": 550,
+            "media_type": "movie",
+            "season_number": 0,
+            "complete": ["core", "similar"],
+            "detail": {
+                "id": 550,
+                "title": "大详情",
+                "overview": "概览",
+                "genres": [],
+                "similar": {"page": 1, "results": [{"overview": "中" * 700000}]},
+            },
+        }
+        trimmed = scraper._trim_tmdb_payload(payload)
+        self.assertIsNotNone(trimmed)
+        self.assertLessEqual(payload_size(trimmed), 2 * 1024 * 1024)
+        self.assertNotIn("similar", trimmed["detail"])
+        self.assertNotIn("similar", trimmed["complete"])
 
     def test_episode_video_limit_fetches_only_requested_count(self):
         detail = tv_detail()
@@ -349,6 +446,37 @@ class TmdbScraperC16Test(unittest.TestCase):
         self.assertNotIn("episode_videos:1:2", payload["complete"])
         embedded = payload["detail"]["seasons"][0]["episodes"][0]
         self.assertEqual(embedded["videos"]["results"][0]["id"], "ev")
+
+    def test_episode_video_request_budget_counts_empty_results(self):
+        detail = tv_detail()
+        season = copy.deepcopy(detail["seasons"][0])
+        season["episodes"].append({
+            "episode_number": 2,
+            "name": "Episode 2",
+            "overview": "Second",
+            "still_path": "/e2.jpg",
+            "air_date": "2011-04-24",
+        })
+        scraper = self.make_filter(media_type="tv", detail=detail, season=season)
+        scraper.episode_video_limit = 1
+        original_get = scraper._requests.get
+
+        def fake_get(url, timeout=None):
+            if "/episode/1/videos" in url:
+                scraper._requests.calls.append(url)
+                return FakeResponse({"results": []})
+            if "/episode/2/videos" in url:
+                scraper._requests.calls.append(url)
+                raise AssertionError("episode request budget should count empty results")
+            return original_get(url, timeout)
+
+        scraper._requests.get = fake_get
+        vod = {"vod_name": "Game of Thrones S01", "vod_year": "2011", "vod_play_url": "第1集$http://example/1.m3u8"}
+        scraper.detail({"list": [vod]})
+
+        episode_urls = [url for url in scraper._requests.calls if url.startswith("http") and "/episode/" in url and "/videos?" in url]
+        self.assertEqual(len(episode_urls), 1)
+        self.assertIn("/episode/1/videos", episode_urls[0])
 
 
 if __name__ == "__main__":

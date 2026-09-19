@@ -20,6 +20,8 @@ AList-TvBox `Atvp.py` 的过滤器示例。
 
 在 `detail` 阶段使用 `detail/tmdb-scraper.py`。它会根据 `vod_name` 搜索 TMDB，然后替换 `vod_name`、`vod_pic`、`vod_year`、`vod_actor`、`vod_director`、`vod_area`、`vod_lang`、`type_name`、`vod_content`、`vod_remarks` 等详情字段。
 
+默认还会写入 WebHTV C16 合同所需的 `tmdb` 结构化字段，包含身份、语言、抓取时间、能力组和 TMDB 原始详情。APP 可直接复用其中的核心信息、演职员、图片、外部 ID、视频和推荐，避免再次访问 TMDB；电视剧会按当前季嵌入季摘要、集列表、季演职员和季图片。默认不抓取单集视频，APP 打开对应集时再按需请求；如需进一步减少 APP 请求，可将 `episode_video_limit` 设为大于 `0` 的超时/请求预算值。若只需旧版 `vod_*` 平铺字段，可将 `include_tmdb_payload` 设为 `false`。
+
 对于剧集结果，它还会加载季集数据，并把剧集标题改写为：
 
 ```text
@@ -36,6 +38,8 @@ AList-TvBox `Atvp.py` 的过滤器示例。
   "type": "auto",
   "season": 1,
   "overwrite_episode_title": true,
+  "include_tmdb_payload": true,
+  "episode_video_limit": 0,
   "timeout": 8
 }
 ```

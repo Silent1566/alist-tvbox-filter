@@ -126,6 +126,22 @@ FILTER_CONFIG_SCHEMA = {
                     "defaultValue": 8
                 },
                 {
+                    "key": "include_tmdb_payload",
+                    "label": "返回 C16 TMDB 数据",
+                    "type": "boolean",
+                    "required": False,
+                    "aliases": ["includeTmdbPayload", "tmdb_payload"],
+                    "defaultValue": True
+                },
+                {
+                    "key": "episode_video_limit",
+                    "label": "单集视频处理上限",
+                    "type": "number",
+                    "required": False,
+                    "aliases": ["episodeVideoLimit"],
+                    "defaultValue": 0
+                },
+                {
                     "key": "debug",
                     "label": "调试日志",
                     "type": "boolean",
@@ -305,6 +321,8 @@ class Filter:
                 "tmdb_api_key", "tmdbApiKey", "api_key", "apiKey", "language",
                 "fallback_language", "fallbackLanguage", "type", "season",
                 "overwrite_episode_title", "overwriteEpisodeTitle", "timeout",
+                "include_tmdb_payload", "includeTmdbPayload", "episode_video_limit",
+                "episodeVideoLimit",
             )
         else:
             keys = (

@@ -47,6 +47,7 @@ FILTER_CONFIG_SCHEMA = {
         "overwrite_episode_title": True,
         "timeout": 8,
         "include_tmdb_payload": True,
+        "episode_video_limit": 0,
         "debug": True
     },
     "fields": [
@@ -116,6 +117,15 @@ FILTER_CONFIG_SCHEMA = {
             "defaultValue": True
         },
         {
+            "key": "episode_video_limit",
+            "label": "单集视频抓取上限",
+            "type": "number",
+            "required": False,
+            "description": "为当前季最多处理多少集视频并内嵌到 C16；0 表示不抓取，交给 APP 延迟加载。",
+            "aliases": ["episodeVideoLimit"],
+            "defaultValue": 0
+        },
+        {
             "key": "debug",
             "label": "调试日志",
             "type": "boolean",
@@ -140,6 +150,7 @@ class Filter:
         self.overwrite_episode_title = True
         self.timeout = 8
         self.include_tmdb_payload = True
+        self.episode_video_limit = 0
         self.debug = True
         self._requests = requests
         self._cache = {}
@@ -166,6 +177,7 @@ class Filter:
             config.get("include_tmdb_payload", config.get("tmdb_payload", config.get("includeTmdbPayload"))),
             True,
         )
+        self.episode_video_limit = max(0, self._to_int(config.get("episode_video_limit", config.get("episodeVideoLimit"))) or 0)
         self.debug = self._to_bool(config.get("debug"), True)
 
         if not self.api_key:
@@ -456,7 +468,39 @@ class Filter:
                 self._log("季：补充 tv=%s season=%s/%s 失败：%s" % (tv_id, season_number, group, exc))
                 continue
             self._attach_detail_group(result, group, payload)
+        if self.episode_video_limit > 0:
+            self._attach_episode_videos(tv_id, result, season_number)
         return result
+
+    def _attach_episode_videos(self, tv_id, season, season_number):
+        episodes = season.get("episodes") if isinstance(season, dict) else None
+        if not isinstance(episodes, list):
+            return
+        count = 0
+        for episode in episodes:
+            if not isinstance(episode, dict):
+                continue
+            episode_number = self._to_int(episode.get("episode_number"))
+            if not episode_number or episode_number <= 0:
+                continue
+            if count >= self.episode_video_limit:
+                break
+            if self._has_non_empty_results(episode.get("videos")):
+                count += 1
+                continue
+            try:
+                payload = self._get_json(
+                    "/tv/%s/season/%s/episode/%s/videos" % (tv_id, season_number, episode_number),
+                    self._request_params("videos"),
+                )
+            except Exception as exc:
+                self._log("单集：补充 tv=%s season=%s episode=%s videos 失败：%s" % (
+                    tv_id, season_number, episode_number, exc,
+                ))
+                continue
+            if self._has_results(payload):
+                episode["videos"] = payload
+                count += 1
 
     def _season_group_complete(self, season, group):
         if group == "credits":
@@ -627,6 +671,12 @@ class Filter:
                 complete.append("season:%s" % season_number)
             if season and self._has_results(season.get("videos")):
                 complete.append("season_videos:%s" % season_number)
+            for episode in season.get("episodes", []) if isinstance(season, dict) and isinstance(season.get("episodes"), list) else []:
+                if not isinstance(episode, dict):
+                    continue
+                episode_number = self._to_int(episode.get("episode_number"))
+                if episode_number and episode_number > 0 and self._has_results(episode.get("videos")):
+                    complete.append("episode_videos:%s:%s" % (season_number, episode_number))
         return sorted(set(complete))
 
     def _core_complete(self, media_type, detail):
@@ -683,6 +733,9 @@ class Filter:
 
     def _has_results(self, value):
         return isinstance(value, dict) and isinstance(value.get("results"), list)
+
+    def _has_non_empty_results(self, value):
+        return self._has_results(value) and bool(value.get("results"))
 
     def _has_page_one(self, value):
         return self._has_results(value) and self._to_int(value.get("page")) == 1

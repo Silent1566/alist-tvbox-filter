@@ -126,6 +126,8 @@ class FakeRequests:
             payload["id"] = self.detail.get("id", 550)
             payload["media_type"] = "tv" if payload.get("name") else "movie"
             return FakeResponse({"results": [payload]})
+        if "/episode/" in url and url.endswith("/videos"):
+            return FakeResponse({"results": []})
         if "/season/" in url:
             return FakeResponse(self.season if self.season is not None else {})
         return FakeResponse(self.detail)
@@ -317,6 +319,36 @@ class TmdbScraperC16Test(unittest.TestCase):
             if field not in trimmed["detail"]:
                 self.assertNotIn(field, trimmed["complete"])
         self.assertIn("core", trimmed["complete"])
+
+    def test_episode_video_limit_fetches_only_requested_count(self):
+        detail = tv_detail()
+        season = copy.deepcopy(detail["seasons"][0])
+        season["episodes"].append({
+            "episode_number": 2,
+            "name": "Episode 2",
+            "overview": "Second",
+            "still_path": "/e2.jpg",
+            "air_date": "2011-04-24",
+        })
+        scraper = self.make_filter(media_type="tv", detail=detail, season=season)
+        scraper.episode_video_limit = 1
+        original_get = scraper._requests.get
+
+        def fake_get(url, timeout=None):
+            if "/episode/1/videos" in url:
+                return FakeResponse({"results": [{"id": "ev", "key": "evk", "site": "YouTube", "type": "Clip", "name": "Episode Clip"}]})
+            if "/episode/2/videos" in url:
+                raise AssertionError("episode video limit should stop at one episode")
+            return original_get(url, timeout)
+
+        scraper._requests.get = fake_get
+        vod = {"vod_name": "Game of Thrones S01", "vod_year": "2011", "vod_play_url": "第1集$http://example/1.m3u8"}
+        scraper.detail({"list": [vod]})
+        payload = vod["tmdb"]
+        self.assertIn("episode_videos:1:1", payload["complete"])
+        self.assertNotIn("episode_videos:1:2", payload["complete"])
+        embedded = payload["detail"]["seasons"][0]["episodes"][0]
+        self.assertEqual(embedded["videos"]["results"][0]["id"], "ev")
 
 
 if __name__ == "__main__":
